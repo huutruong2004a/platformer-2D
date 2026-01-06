@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "254651161752",
+    "project_id": "platform-2d-315d1",
+    "storage_bucket": "platform-2d-315d1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:254651161752:android:0fcc6ceab246d04e4044ed",
+        "android_client_info": {
+          "package_name": "com.example.platformer_2d"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD77f6scjdbCL8Mbel9JofYTQZfjpVbMJU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
