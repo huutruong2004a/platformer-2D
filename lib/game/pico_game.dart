@@ -67,7 +67,7 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
     this.world = world;
 
     camera.viewfinder.anchor = Anchor.center;
-    camera.viewfinder.zoom = 1.5; // Fix zoom 1.5 như bản ổn định
+    camera.viewfinder.zoom = 2.0; // Zoom level synchronized
     
     // Setup Multiplayer Callbacks
     _setupMultiplayerCallbacks();
@@ -380,7 +380,7 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
     final newWorld = PicoWorld(currentLevelId: levelId);
     world = newWorld;
     add(newWorld);
-    camera.viewfinder.zoom = 1.0;
+    camera.viewfinder.zoom = 2.0; // Must match onLoad zoom value
     camera.viewfinder.anchor = Anchor.center;
     
     // Reset mobile control states

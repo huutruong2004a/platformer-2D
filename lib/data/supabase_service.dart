@@ -28,6 +28,9 @@ class SupabaseService {
   final List<Function()> _levelResetCallbacks = [];
   final List<Function(String)> _playerAtFlagCallbacks = [];
   final List<Function(String)> _startGameCallbacks = [];
+  
+  // Track current level for late joiners
+  String? _currentLevel;
 
   // Getter lấy User ID
   String? get currentUserId => _client.auth.currentUser?.id;
@@ -184,8 +187,11 @@ class SupabaseService {
         .subscribe((status, [error]) {
            print('Channel Status: $status, Error: $error');
            if (status == RealtimeSubscribeStatus.subscribed) {
-             // Track user presence explicitly
-             _roomChannel!.track({'user_id': currentUserId});
+             // Track user presence with current level (if any)
+             _roomChannel!.track({
+               'user_id': currentUserId,
+               'current_level': _currentLevel,
+             });
              
              if (!completer.isCompleted) completer.complete(true);
            } else if (status == RealtimeSubscribeStatus.closed || status == RealtimeSubscribeStatus.timedOut) {
@@ -225,17 +231,34 @@ class SupabaseService {
     
     final presenceState = _roomChannel!.presenceState();
     final List<String> playerIds = [];
+    String? foundCurrentLevel;
     
     for (final singlePresence in presenceState) {
       for (final presence in singlePresence.presences) {
         final userId = presence.payload['user_id'] as String?;
+        final level = presence.payload['current_level'] as String?;
+        
         if (userId != null && !playerIds.contains(userId)) {
           playerIds.add(userId);
+        }
+        
+        // Check if any player is in a game level
+        if (level != null && level.isNotEmpty && foundCurrentLevel == null) {
+          foundCurrentLevel = level;
         }
       }
     }
     
     print('Presence sync: ${playerIds.length} players online: $playerIds');
+    
+    // If we found a level and we're not in it, trigger late-join callback
+    if (foundCurrentLevel != null && _currentLevel == null) {
+      print('Late-joiner detected! Other players are in level: $foundCurrentLevel');
+      // Trigger start_game callback for late joiner auto-navigation
+      for (final cb in _startGameCallbacks) {
+        cb(foundCurrentLevel);
+      }
+    }
     
     // Create copy to iterate safely
     final listeners = List.from(_presenceSyncCallbacks);
@@ -311,6 +334,15 @@ class SupabaseService {
       return;
     }
     
+    // Set current level for late-joiners detection
+    _currentLevel = levelId;
+    
+    // Update presence with current level
+    _roomChannel!.track({
+      'user_id': currentUserId,
+      'current_level': _currentLevel,
+    });
+    
     // Single broadcast - WebSocket is reliable, no retry needed
     try {
       await _roomChannel!.sendBroadcastMessage(
@@ -320,6 +352,20 @@ class SupabaseService {
       print("Broadcast start_game sent successfully for level: $levelId");
     } catch (e) {
       print("Broadcast start_game FAILED: $e");
+    }
+  }
+  
+  // Set current level (called when navigating to game level)
+  void setCurrentLevel(String? levelId) {
+    _currentLevel = levelId;
+    print("Current level set to: $levelId");
+    
+    // Update presence if channel is active
+    if (_roomChannel != null && currentUserId != null) {
+      _roomChannel!.track({
+        'user_id': currentUserId,
+        'current_level': _currentLevel,
+      });
     }
   }
 

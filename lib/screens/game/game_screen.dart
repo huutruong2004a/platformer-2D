@@ -96,6 +96,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       
       multiGame.scoreNotifier.addListener(_onScoreChanged);
       _game = multiGame;
+      
+      // Update presence with current level for late-joiners
+      supabaseService.setCurrentLevel(widget.levelId);
+      
       print("Initialized MULTIPLAYER Game: ${widget.levelId}");
     } else {
       // === SINGLE PLAYER ===
