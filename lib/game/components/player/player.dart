@@ -18,6 +18,7 @@ class Player extends BodyComponent<Forge2DGame> with KeyboardHandler, HasGameRef
   final Vector2 initialPosition;
   final bool isControllable; // Cờ kiểm soát input
   final int skinIndex; // 0: Green, 1: Blue, 2: Pink, 3: Yellow
+  final String playerId; // Supabase User ID for multiplayer sync
   late SpriteComponent spriteComponent;
 
   int horizontalDirection = 0;
@@ -35,6 +36,7 @@ class Player extends BodyComponent<Forge2DGame> with KeyboardHandler, HasGameRef
     required this.initialPosition, 
     this.isControllable = true, 
     this.skinIndex = 0,
+    this.playerId = 'local_player', // Default for single player
   });
 
   @override

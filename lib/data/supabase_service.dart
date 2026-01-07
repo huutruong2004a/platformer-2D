@@ -2,9 +2,24 @@ import 'dart:async';
 import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+/// SupabaseService as a Singleton to maintain channel connection across navigation
 class SupabaseService {
+  // Singleton instance
+  static final SupabaseService _instance = SupabaseService._internal();
+  
+  // Factory constructor returns singleton instance
+  factory SupabaseService() => _instance;
+  
+  // Private constructor
+  SupabaseService._internal();
+  
   final SupabaseClient _client = Supabase.instance.client;
   RealtimeChannel? _roomChannel;
+  
+  // Store current roomId for debugging
+  String? _currentRoomId;
+  String? get currentRoomId => _currentRoomId;
+  
   // List of callbacks (Multi-listener pattern)
   final List<Function(Map<String, dynamic>)> _gameMoveCallbacks = [];
   final List<Function(String, int)> _skinUpdateCallbacks = [];
@@ -46,7 +61,20 @@ class SupabaseService {
   void setCoinCollectedCallback(Function(String) callback) => _coinCollectedCallbacks.add(callback);
   void setLevelResetCallback(Function() callback) => _levelResetCallbacks.add(callback);
   void setPlayerAtFlagCallback(Function(String) callback) => _playerAtFlagCallbacks.add(callback);
-  void setStartGameCallback(Function(String) callback) => _startGameCallbacks.add(callback);
+  void setStartGameCallback(Function(String) callback) {
+    print("setStartGameCallback called - total callbacks before: ${_startGameCallbacks.length}");
+    // IMPORTANT: Clear old callbacks before adding new one to prevent accumulation
+    // When navigating between screens, callbacks pile up causing duplicate navigations
+    _startGameCallbacks.clear();
+    _startGameCallbacks.add(callback);
+    print("setStartGameCallback complete - total callbacks after: ${_startGameCallbacks.length}");
+  }
+  
+  // Method to clear all start game callbacks (called when leaving room)
+  void clearStartGameCallbacks() {
+    print("Clearing all start_game callbacks");
+    _startGameCallbacks.clear();
+  }
 
 
   // 1. Đăng nhập Ẩn danh
@@ -80,7 +108,13 @@ class SupabaseService {
     final cleanRoomId = roomId.trim();
     if (cleanRoomId.isEmpty) return false;
 
+    print("SupabaseService.joinRoom: Joining room $cleanRoomId (singleton instance)");
+    
+    // Save current roomId
+    _currentRoomId = cleanRoomId;
+
     if (_roomChannel != null) {
+      print("SupabaseService.joinRoom: Removing existing channel");
       await _client.removeChannel(_roomChannel!);
     }
 
@@ -90,6 +124,8 @@ class SupabaseService {
       'room_$cleanRoomId',
       opts: const RealtimeChannelConfig(self: true),
     );
+    
+    print("SupabaseService.joinRoom: Created channel room_$cleanRoomId, _roomChannel is now NOT null");
 
     _roomChannel!
         // Broadcast events
@@ -106,8 +142,20 @@ class SupabaseService {
         .onBroadcast(event: 'start_game', callback: (payload) {
            final data = _extractPayload(payload);
            print("START GAME received: $data");
+           
+           // CRITICAL: Host navigates directly from LevelSelectionScreen
+           // Skip callback if this is our own broadcast to prevent race condition
+           if (data != null && data['id'] == currentUserId) {
+             print("Ignoring own start_game broadcast (Host navigates directly)");
+             return;
+           }
+           
+           print("Number of start_game callbacks registered: ${_startGameCallbacks.length}");
            if (data != null && data['level_id'] != null) {
-             for (final cb in _startGameCallbacks) cb(data['level_id']);
+             for (final cb in _startGameCallbacks) {
+               print("Dispatching start_game callback with level: ${data['level_id']}");
+               cb(data['level_id']);
+             }
            }
         })
         .onBroadcast(event: 'reset', callback: (payload) {
@@ -252,16 +300,26 @@ class SupabaseService {
 
   // 8. Broadcast game start (all players navigate together)
   Future<void> broadcastStartGame(String levelId) async {
-    if (_roomChannel == null || currentUserId == null) return;
+    print("broadcastStartGame called with levelId: $levelId");
     
-    // RETRY LOGIC: Send 3 times to ensure delivery
-    for (int i = 0; i < 3; i++) {
-        print("Broadcasting Start Game: Attempt ${i+1}");
-        await _roomChannel!.sendBroadcastMessage(
-          event: 'start_game',
-          payload: {'id': currentUserId, 'level_id': levelId},
-        );
-        await Future.delayed(const Duration(milliseconds: 300));
+    if (_roomChannel == null) {
+      print("ERROR: Cannot broadcast - _roomChannel is null!");
+      return;
+    }
+    if (currentUserId == null) {
+      print("ERROR: Cannot broadcast - currentUserId is null!");
+      return;
+    }
+    
+    // Single broadcast - WebSocket is reliable, no retry needed
+    try {
+      await _roomChannel!.sendBroadcastMessage(
+        event: 'start_game',
+        payload: {'id': currentUserId, 'level_id': levelId},
+      );
+      print("Broadcast start_game sent successfully for level: $levelId");
+    } catch (e) {
+      print("Broadcast start_game FAILED: $e");
     }
   }
 

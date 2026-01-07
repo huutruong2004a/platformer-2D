@@ -20,7 +20,7 @@ final class RoomNotifierProvider
         argument: null,
         retry: null,
         name: r'roomProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: null,
         $allTransitiveDependencies: null,
       );
@@ -41,7 +41,7 @@ final class RoomNotifierProvider
   }
 }
 
-String _$roomNotifierHash() => r'ed329dcfb437cc19dfd18eb28d2a8048d00144db';
+String _$roomNotifierHash() => r'736c6e6cbce83bb95e768207b541b324f30f7215';
 
 abstract class _$RoomNotifier extends $Notifier<RoomState> {
   RoomState build();

@@ -12,8 +12,13 @@ import 'pause_menu.dart';
 
 class GameScreen extends ConsumerStatefulWidget {
   final String levelId;
+  final String? roomIdFromUrl; // Optional: passed from URL for multiplayer
 
-  const GameScreen({super.key, required this.levelId});
+  const GameScreen({
+    super.key, 
+    required this.levelId,
+    this.roomIdFromUrl,
+  });
 
   @override
   ConsumerState<GameScreen> createState() => _GameScreenState();
@@ -51,14 +56,42 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   void _initGame() {
     final roomState = ref.read(roomProvider);
     final roomNotifier = ref.read(roomProvider.notifier);
+    final supabaseService = roomNotifier.supabaseService;
     
-    if (roomState.roomId != null) {
+    // DEBUG: Log all state
+    print("GameScreen _initGame:");
+    print("  - widget.roomIdFromUrl: ${widget.roomIdFromUrl}");
+    print("  - roomState.roomId: ${roomState.roomId}");
+    print("  - roomState.isHost: ${roomState.isHost}");
+    print("  - roomState.players: ${roomState.players.length}");
+    
+    // Determine if this is a multiplayer game:
+    // 1. Check provider state first
+    // 2. Fallback to URL parameter if provider state is lost
+    final isMultiplayer = roomState.roomId != null || widget.roomIdFromUrl != null;
+    
+    if (isMultiplayer) {
       // === MULTIPLAYER ===
+      // CRITICAL FIX: Use SupabaseService singleton as fallback when RoomProvider state is lost
+      // This happens when Host navigates from LevelSelectionScreen (state not preserved)
+      final currentUserId = roomState.currentUserId ?? supabaseService.currentUserId;
+      
+      // If we have no players from state, use current user as the only known player
+      // Other players will be added via Self-Healing when they send move data
+      List<String> players = roomState.players.isNotEmpty 
+          ? roomState.players 
+          : (currentUserId != null ? [currentUserId] : []);
+      
+      print("Creating MULTIPLAYER Game");
+      print("  - Players from state: ${roomState.players}");
+      print("  - CurrentUserId (resolved): $currentUserId");
+      print("  - Final players list: $players");
+      
       final multiGame = PicoGame(
         levelId: widget.levelId,
-        players: roomState.players,
-        currentUserId: roomState.currentUserId,
-        supabaseService: roomNotifier.supabaseService,
+        players: players,
+        currentUserId: currentUserId,
+        supabaseService: supabaseService,
       );
       
       multiGame.scoreNotifier.addListener(_onScoreChanged);
@@ -66,6 +99,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       print("Initialized MULTIPLAYER Game: ${widget.levelId}");
     } else {
       // === SINGLE PLAYER ===
+      print("Creating SINGLE PLAYER Game (no roomId in state or URL)");
       final singleGame = PicoGameSingle(
         levelId: widget.levelId,
       );
@@ -88,6 +122,19 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       ref.read(gameProvider.notifier).syncScore((_game as PicoGameSingle).scoreNotifier.value);
     }
   }
+
+  @override
+  void dispose() {
+    _removeListeners();
+    super.dispose();
+  }
+  
+  void _setupGameListeners() {
+    // Don't set up start_game listener here - LobbyScreen handles navigation
+    // This prevents callback accumulation and duplicate navigation
+    // LobbyScreen's callback has the captured roomId which is essential for multiplayer
+    print("GameScreen: start_game navigation handled by LobbyScreen");
+  }
   
   void _removeListeners() {
     if (_game is PicoGame) {
@@ -98,63 +145,23 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 
   @override
-  void dispose() {
-    _removeListeners();
-    super.dispose();
-  }
-  
-  void _setupGameListeners() {
-    final roomNotifier = ref.read(roomProvider.notifier);
-    // Listen for "start_game" (Next Level / Restart) from Host
-    roomNotifier.setStartGameCallback((levelId) {
-      if (!mounted) return;
-      
-      // Debounce: Ignore duplicate calls within 2 seconds
-      final now = DateTime.now();
-      if (_lastStartGameTime != null && now.difference(_lastStartGameTime!) < const Duration(seconds: 2)) {
-         print("Ignored duplicate start_game: $levelId");
-         return;
-      }
-      _lastStartGameTime = now;
-      
-      print("GameScreen received start_game: $levelId");
-      if (levelId.startsWith('map')) {
-         context.pushReplacement('/play/$levelId');
-      } else {
-         context.go('/levels');
-      }
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final roomState = ref.watch(roomProvider);
+    final isHost = roomState.isHost;
+    
     if (_game == null) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
     
-    final roomState = ref.read(roomProvider);
-    final isHost = (roomState.roomId == null) || roomState.isHost;
-    
     return Scaffold(
       body: GameWidget(
         game: _game!,
         overlayBuilderMap: {
-          'HUD': (context, game) {
-             if (game is PicoGame) return GameHud(game: game);
-             if (game is PicoGameSingle) return GameHud(game: game); // HUD needs update too?
-             return const SizedBox();
-          },
-          'LevelComplete': (context, game) {
-             return LevelCompleteMenu(
-               game: game, // Pass dynamic or interface
-               isHost: isHost
-            );
-          },
-          'PauseMenu': (context, game) {
-             return PauseMenu(game: game); // PauseMenu needs update too?
-          },
+          'HUD': (context, game) => GameHud(game: game),
+          'LevelComplete': (context, game) => LevelCompleteMenu(game: game, isHost: isHost),
+          'PauseMenu': (context, game) => PauseMenu(game: game),
         },
         initialActiveOverlays: const ['HUD'],
       ),

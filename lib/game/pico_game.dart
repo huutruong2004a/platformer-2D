@@ -35,6 +35,12 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
   
   // Multiplayer Flag Tracking
   final Set<String> playersAtFlag = {};
+  
+  // Player Registry for fast lookup by userId
+  final Map<String, Player> _playerRegistry = {};
+  
+  // Buffer for moves received before map loads
+  final List<Map<String, dynamic>> _pendingMoves = [];
 
   PicoGame({
     required this.levelId, 
@@ -84,6 +90,15 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
       // Ensure sorted before spawning
       players.sort();
       _spawnPlayers();
+    }
+    
+    // Process buffered moves that arrived during loading
+    if (_pendingMoves.isNotEmpty) {
+      print('Processing ${_pendingMoves.length} buffered moves');
+      for (final move in _pendingMoves) {
+        _processRemoteMove(move);
+      }
+      _pendingMoves.clear();
     }
   }
   
@@ -158,16 +173,20 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
        final isMe = playerId == currentUserId;
        
        // Calculate position based on index (sorted)
-       final spawnPos = currentLevelSpawnPoint! + Vector2(i * 10.0, 0); 
+       final spawnPos = currentLevelSpawnPoint! + Vector2(i * 20.0, 0); 
        
        final player = Player(
          initialPosition: spawnPos,
          isControllable: isMe,
          skinIndex: i, // Index determines skin
+         playerId: playerId, // Store player ID for sync
        );
        
+       // Register player for fast lookup
+       _playerRegistry[playerId] = player;
+       
        world.add(player);
-       print('Spawned Player: $playerId (Me: $isMe) at Index $i');
+       print('Spawned Player: $playerId (Me: $isMe) at Index $i, Pos: $spawnPos');
      }
   }
 
@@ -182,49 +201,48 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
   }
 
   void _updateCamera(double dt) {
-    // 1. Find the Local Player (My Character)
+    final viewportSize = camera.viewport.virtualSize;
+    final currentZoom = camera.viewfinder.zoom;
+    
+    final mapWidth = mapSize.x;
+    final mapHeight = mapSize.y;
+    
+    // Calculate half view size in world coordinates
+    final halfViewWidth = viewportSize.x / (2 * currentZoom);
+    final halfViewHeight = viewportSize.y / (2 * currentZoom);
+    
+    Vector2 targetPos;
+    
+    // 1. Try to find the Local Player
     try {
       final player = world.children.query<Player>().firstWhere((p) => p.isControllable);
-      
-      // 2. Target Position (Center on Player)
-      final targetPos = player.body.position;
-      
-      // 3. Clamp camera to map bounds
-      final viewportSize = camera.viewport.virtualSize;
-      final currentZoom = camera.viewfinder.zoom;
-      
-      final mapWidth = mapSize.x;
-      final mapHeight = mapSize.y;
-      
-      // Calculate half view size in world coordinates
-      final halfViewWidth = viewportSize.x / (2 * currentZoom);
-      final halfViewHeight = viewportSize.y / (2 * currentZoom);
-
-      double clampedX = targetPos.x;
-      double clampedY = targetPos.y;
-
-      // Only clamp if map is larger than viewport
-      if (mapWidth > halfViewWidth * 2) {
-        clampedX = clampedX.clamp(halfViewWidth, mapWidth - halfViewWidth);
-      } else {
-        clampedX = mapWidth / 2;
-      }
-
-      if (mapHeight > halfViewHeight * 2) {
-        clampedY = clampedY.clamp(halfViewHeight, mapHeight - halfViewHeight);
-      } else {
-        clampedY = mapHeight / 2;
-      }
-      
-      // 4. Smooth Follow (Manual Lerp - Proven Smoother)
-      final currentPos = camera.viewfinder.position;
-      final newPos = currentPos + (Vector2(clampedX, clampedY) - currentPos) * (dt * 5.0);
-      
-      camera.viewfinder.position = newPos;
-
+      targetPos = player.body.position;
     } catch (e) {
-      // Player might not be spawned yet
+      // No player spawned yet - center camera on map
+      targetPos = Vector2(mapWidth / 2, mapHeight / 2);
     }
+
+    double clampedX = targetPos.x;
+    double clampedY = targetPos.y;
+
+    // Clamp to map bounds
+    if (mapWidth > halfViewWidth * 2) {
+      clampedX = clampedX.clamp(halfViewWidth, mapWidth - halfViewWidth);
+    } else {
+      clampedX = mapWidth / 2;
+    }
+
+    if (mapHeight > halfViewHeight * 2) {
+      clampedY = clampedY.clamp(halfViewHeight, mapHeight - halfViewHeight);
+    } else {
+      clampedY = mapHeight / 2;
+    }
+    
+    // Smooth Follow
+    final currentPos = camera.viewfinder.position;
+    final newPos = currentPos + (Vector2(clampedX, clampedY) - currentPos) * (dt * 5.0);
+    
+    camera.viewfinder.position = newPos;
   }
 
   void _handleMultiplayerSync(double dt) {
@@ -257,6 +275,17 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
 
 
   void onRemoteMove(Map<String, dynamic> data) {
+    // If level is still loading, buffer the move for later processing
+    if (_isLevelLoading) {
+      _pendingMoves.add(data);
+      return;
+    }
+    
+    _processRemoteMove(data);
+  }
+  
+  // Actual move processing logic (called directly or from buffer)
+  void _processRemoteMove(Map<String, dynamic> data) {
     final id = data['id'] as String?;
     final xRaw = data['x'];
     final yRaw = data['y'];
@@ -274,23 +303,22 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
     final vx = (vxRaw as num?)?.toDouble() ?? 0.0;
     final vy = (vyRaw as num?)?.toDouble() ?? 0.0;
     
-    // Tìm Player Entity tương ứng
+    // Self-healing: Add player if not in list
     if (!players.contains(id)) {
-       // SELF-HEALING: Player sent data but is not in list (Presence Sync failed/lagged)
        print("Self-Healing: Found unknown player $id active in game. Adding...");
        players.add(id);
        players.sort();
        _spawnPlayers();
     }
     
-    final index = players.indexOf(id);
-    
-    final playerComponents = world.children.query<Player>();
-    for (final p in playerComponents) {
-      if (!p.isControllable && p.skinIndex == index) {
-        p.updateStateFromServer(x, y, vx, vy);
-        break;
-      }
+    // Use Player Registry for fast lookup
+    final player = _playerRegistry[id];
+    if (player != null && !player.isControllable) {
+      player.updateStateFromServer(x, y, vx, vy);
+    } else if (player == null) {
+      // Player not yet spawned, queue a spawn attempt
+      print("Player $id not in registry, attempting spawn...");
+      _spawnPlayers();
     }
   }
 
@@ -346,6 +374,7 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
     playersAtFlag.clear();
     _spawnedPlayerIds.clear(); // Clear to prevent duplication on respawn
     _coinRegistry.clear(); // Clear coin registry
+    _playerRegistry.clear(); // Clear player registry for fresh spawn
     
     remove(world);
     final newWorld = PicoWorld(currentLevelId: levelId);

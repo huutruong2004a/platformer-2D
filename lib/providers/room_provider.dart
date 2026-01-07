@@ -104,21 +104,30 @@ class RoomNotifier extends _$RoomNotifier {
     
     // Listen for Skin Updates
     _supabaseService.setSkinUpdateCallback((userId, skinIndex) {
-       final newSkins = Map<String, int>.from(state.playerSkins);
-       newSkins[userId] = skinIndex;
-       state = state.copyWith(playerSkins: newSkins);
+       try {
+         final newSkins = Map<String, int>.from(state.playerSkins);
+         newSkins[userId] = skinIndex;
+         state = state.copyWith(playerSkins: newSkins);
+       } catch (e) {
+         print("Error in Skin callback: $e");
+       }
     });
 
     // PRESENCE: Listen for player list changes
     _supabaseService.setPresenceSyncCallback((playerIds) {
-      print("Presence updated: $playerIds");
-      state = state.copyWith(players: playerIds);
-      
-      // Broadcast skin của mình cho người mới vào
-      if (state.currentUserId != null && state.playerSkins.containsKey(state.currentUserId)) {
-        _supabaseService.broadcastSkin(state.playerSkins[state.currentUserId]!);
+      try {
+        print("Presence updated: $playerIds");
+        state = state.copyWith(players: playerIds);
+        
+        // Broadcast skin của mình cho người mới vào
+        if (state.currentUserId != null && state.playerSkins.containsKey(state.currentUserId)) {
+          _supabaseService.broadcastSkin(state.playerSkins[state.currentUserId]!);
+        }
+      } catch (e) {
+        print("Error in Presence callback: $e");
       }
     });
+
 
     return await _supabaseService.joinRoom(roomId, (data) {
       // Move data callback (handled by PicoGame)

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../game/pico_game.dart';
 import '../../providers/room_provider.dart';
 import '../../core/utils/pixel_ui.dart';
+import '../../app/router/app_router.dart'; // Import for global navigation
 
 class LobbyScreen extends ConsumerStatefulWidget {
   const LobbyScreen({super.key});
@@ -22,6 +23,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   bool _isJoining = false;
   String? _errorMessage;
   bool _callbackSetup = false;
+  bool _hasNavigatedToGame = false; // Prevent duplicate navigation
   
   // Cache game instances to prevent recreation on rebuild
   PicoGame? _lobbyGame;
@@ -44,24 +46,39 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     }
     return _lobbyGame!;
   }
-  
   void _setupStartGameCallback() {
     if (_callbackSetup) return;
     _callbackSetup = true;
     
+    // IMPORTANT: Capture roomId NOW, before widget might dispose
+    // This prevents "Using ref when widget is unmounted" error
+    final capturedRoomState = ref.read(roomProvider);
+    final capturedRoomId = capturedRoomState.roomId;
+    print("Setting up start_game callback with captured roomId: $capturedRoomId");
+    
     ref.read(roomProvider.notifier).setStartGameCallback((levelId) {
+      // Guard: Only navigate once
+      if (_hasNavigatedToGame) {
+        print("Ignoring duplicate start_game (already navigated)");
+        return;
+      }
+      
       // All players receive this - navigate to game
-      // Note: Host ignores this due to self-broadcast filter in Service
-      if (mounted) {
-        if (levelId.startsWith('map')) {
-           print("Lobby Client received Start Game: $levelId");
-           context.go('/play/$levelId'); // Use go to dispose Lobby
-        } else {
-           // Fallback/Error handling
-           print("Unknown level ID received: $levelId");
-        }
+      // Use CAPTURED roomId, not ref.read() which might fail after dispose
+      if (levelId.startsWith('map')) {
+         _hasNavigatedToGame = true; // Set flag BEFORE navigation
+         print("Lobby Client received Start Game: $levelId, capturedRoomId: $capturedRoomId - Navigating via global router");
+         // Pass roomId as query parameter to preserve multiplayer state
+         if (capturedRoomId != null) {
+           AppRouter.router.go('/play/$levelId?roomId=$capturedRoomId');
+         } else {
+           AppRouter.router.go('/play/$levelId');
+         }
+      } else {
+         print("Unknown level ID received: $levelId");
       }
     });
+    print("Start Game callback setup complete.");
   }
 
   @override
@@ -364,9 +381,11 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                   color: const Color(0xFF88C070),
                   width: 140,
                   onPressed: () {
-                    // Navigate Host to Level Selection (Do not broadcast yet)
-                    // Broadcast will happen when Host selects a specific level
-                    context.go('/levels');
+                    // Navigate Host to Level Selection with roomId
+                    // IMPORTANT: Pass roomId to ensure state is preserved
+                    final roomId = roomState.roomId;
+                    print("Host clicking START, roomId: $roomId");
+                    context.go('/levels?roomId=$roomId');
                   },
                 )
               else

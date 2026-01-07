@@ -135,6 +135,7 @@ class LevelLoader extends Component with HasGameRef<Forge2DGame> {
        initialPosition: Vector2(x, y),
        isControllable: true,
        skinIndex: 0,
+       playerId: 'local_player',
      );
      await worldRef.add(player);
   }

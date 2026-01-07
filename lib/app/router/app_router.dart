@@ -19,17 +19,30 @@ class AppRouter {
         path: '/lobby',
         builder: (context, state) => const LobbyScreen(),
       ),
-      // Route mới: Màn hình chọn Level
+      // Route: Level Selection with optional roomId
       GoRoute(
         path: '/levels',
-        builder: (context, state) => const LevelSelectionScreen(),
+        builder: (context, state) {
+          final roomId = state.uri.queryParameters['roomId'];
+          print("AppRouter: /levels route, roomId from URL: $roomId");
+          return LevelSelectionScreen(roomIdFromUrl: roomId);
+        },
       ),
-      // Route Game: Thêm tham số :levelId
+      // Route Game: Thêm tham số :levelId và optional query params
       GoRoute(
         path: '/play/:levelId', 
         builder: (context, state) {
           final levelId = state.pathParameters['levelId'] ?? 'map1';
-          return GameScreen(levelId: levelId);
+          // Get optional query parameters for multiplayer
+          final roomId = state.uri.queryParameters['roomId'];
+          final isMultiplayer = roomId != null && roomId.isNotEmpty;
+          
+          print("AppRouter: Creating GameScreen with levelId=$levelId, roomId=$roomId, isMultiplayer=$isMultiplayer");
+          
+          return GameScreen(
+            levelId: levelId, 
+            roomIdFromUrl: roomId,
+          );
         },
       ),
     ],
