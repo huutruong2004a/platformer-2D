@@ -94,6 +94,13 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     final roomNotifier = ref.read(roomProvider.notifier);
     isInRoom = roomState.roomId != null;
     
+    // Reset flags when room changes (left old room or joined new room)
+    if (_lastRoomId != roomState.roomId) {
+      _callbackSetup = false;
+      _hasNavigatedToGame = false;
+      _lastRoomId = roomState.roomId;
+    }
+    
     // Setup callback when in room
     if (isInRoom) {
       _setupStartGameCallback();
@@ -148,29 +155,35 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
   // --- MÀN HÌNH NHẬP ID / TẠO PHÒNG ---
   Widget _buildJoinDialog(BuildContext context) {
+    // Responsive sizing
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 600;
+    final dialogWidth = isSmallScreen ? screenWidth * 0.85 : 400.0;
+    final titleSize = isSmallScreen ? 40.0 : 60.0;
+    
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         // Tiêu đề
         Text(
           "MULTIPLAYER",
-          style: PixelUI.font(size: 60, color: Colors.white).copyWith(
-            shadows: [const BoxShadow(color: Colors.black, offset: Offset(4, 4))],
+          style: PixelUI.font(size: titleSize, color: Colors.white).copyWith(
+            shadows: [BoxShadow(color: Colors.black, offset: Offset(isSmallScreen ? 3 : 4, isSmallScreen ? 3 : 4))],
           ),
         ),
-        const SizedBox(height: 40),
+        SizedBox(height: isSmallScreen ? 24 : 40),
 
         // Hộp thoại chính
         Container(
-          width: 400,
-          padding: const EdgeInsets.all(24),
+          width: dialogWidth,
+          padding: EdgeInsets.all(isSmallScreen ? 16 : 24),
           decoration: BoxDecoration(
             color: const Color(0xFF2d1b2e), // Màu tím than đậm
-            border: Border.all(color: Colors.white, width: 4),
+            border: Border.all(color: Colors.white, width: isSmallScreen ? 3 : 4),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.8),
-                offset: const Offset(8, 8),
+                offset: Offset(isSmallScreen ? 6 : 8, isSmallScreen ? 6 : 8),
               )
             ],
           ),
@@ -181,26 +194,27 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 text: "CREATE ROOM",
                 color: const Color(0xFF88C070), // Xanh lá
                 width: double.infinity,
+                isSmall: isSmallScreen,
                 onPressed: () => ref.read(roomProvider.notifier).createRoom("Player"),
               ),
               
-              const SizedBox(height: 24),
+              SizedBox(height: isSmallScreen ? 16 : 24),
               Row(children: [
                 const Expanded(child: Divider(color: Colors.white, thickness: 2)),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Text("OR", style: PixelUI.font(size: 20, color: Colors.grey)),
+                  child: Text("OR", style: PixelUI.font(size: isSmallScreen ? 16 : 20, color: Colors.grey)),
                 ),
                 const Expanded(child: Divider(color: Colors.white, thickness: 2)),
               ]),
-              const SizedBox(height: 24),
+              SizedBox(height: isSmallScreen ? 16 : 24),
 
               // Ô Nhập ID
               PixelUI.textField(
                 controller: _roomIdController,
                 hint: "ENTER ROOM ID",
               ),
-              const SizedBox(height: 16),
+              SizedBox(height: isSmallScreen ? 12 : 16),
               
               // Thông báo lỗi (nếu có)
               if (_errorMessage != null)
@@ -230,6 +244,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                 text: _isJoining ? "JOINING..." : "JOIN ROOM",
                 color: _isJoining ? Colors.grey : const Color(0xFFe0c070), // Vàng
                 width: double.infinity,
+                isSmall: isSmallScreen,
                 onPressed: _isJoining ? () {} : () => _joinRoom(),
               ),
             ],
@@ -577,7 +592,8 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
      try {
        final image = Flame.images.fromCache('tilemap-characters_packed.png');
        // Tính toán tọa độ cắt (24x24 px, cách nhau 24px)
-       final double spriteX = (skinIndex % 9) * 24.0; // Giả sử hàng ngang có nhiều con
+       // Sử dụng 4 characters đầu tiên trong row 0 (skinIndex 0-3)
+       final double spriteX = (skinIndex % 4) * 24.0; // Sync với Player.dart
        final sprite = Sprite(
          image,
          srcPosition: Vector2(spriteX, 0),

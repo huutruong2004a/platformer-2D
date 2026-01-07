@@ -160,42 +160,56 @@ class MenuScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Responsive sizing based on screen width
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isSmallScreen = screenWidth < 600;
+    final titleSize = isSmallScreen ? 40.0 : 60.0;
+    final subtitleSize = isSmallScreen ? 24.0 : 35.0;
+    final buttonWidth = isSmallScreen ? screenWidth * 0.75 : 280.0;
+    final spacing = isSmallScreen ? 12.0 : 16.0;
+    
     return Scaffold(
       body: Stack(
         children: [
-          // Bọc GameWidget trong IgnorePointer để không chặn sự kiện chạm của UI
+          // Background game
           IgnorePointer(
             child: GameWidget(game: MenuBackgroundGame()),
           ),
           Container(color: Colors.black.withOpacity(0.3)), // Overlay
           Center(
             child: SingleChildScrollView(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(height: 30),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF5f5f5f),
-                      border: Border.all(color: const Color(0xFFe0e0e0), width: 4),
-                      boxShadow: const [BoxShadow(color: Colors.black54, offset: Offset(6, 6), blurRadius: 0)],
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 16 : 0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(height: isSmallScreen ? 20 : 30),
+                    Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isSmallScreen ? 24 : 40, 
+                        vertical: isSmallScreen ? 12 : 20
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF5f5f5f),
+                        border: Border.all(color: const Color(0xFFe0e0e0), width: isSmallScreen ? 3 : 4),
+                        boxShadow: [BoxShadow(color: Colors.black54, offset: Offset(isSmallScreen ? 4 : 6, isSmallScreen ? 4 : 6), blurRadius: 0)],
+                      ),
+                      child: Column(
+                        children: [
+                          _pixelText('PICO', titleSize, const Color(0xFFb8f889)),
+                          const SizedBox(height: 5),
+                          _pixelText('ADVENTURE', subtitleSize, Colors.white),
+                        ],
+                      ),
                     ),
-                    child: Column(
-                      children: [
-                        _pixelText('PICO', 60, const Color(0xFFb8f889)),
-                        const SizedBox(height: 5),
-                        _pixelText('ADVENTURE', 35, Colors.white),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 50),
-                  PixelButton(label: "START GAME", icon: Icons.play_arrow, color: const Color(0xFFb8f889), onPressed: () => context.go('/levels')),
-                  const SizedBox(height: 16),
-                  PixelButton(label: "MULTIPLAYER", icon: Icons.groups, color: const Color(0xFFf8b789), onPressed: () => context.go('/lobby')),
-                  const SizedBox(height: 16),
-                  PixelButton(label: "SETTINGS", icon: Icons.settings, color: const Color(0xFFe0e0e0), onPressed: () {}),
-                ],
+                    SizedBox(height: isSmallScreen ? 30 : 50),
+                    PixelButton(label: "START GAME", icon: Icons.play_arrow, color: const Color(0xFFb8f889), width: buttonWidth, onPressed: () => context.go('/levels')),
+                    SizedBox(height: spacing),
+                    PixelButton(label: "MULTIPLAYER", icon: Icons.groups, color: const Color(0xFFf8b789), width: buttonWidth, onPressed: () => context.go('/lobby')),
+                    SizedBox(height: spacing),
+                    PixelButton(label: "SETTINGS", icon: Icons.settings, color: const Color(0xFFe0e0e0), width: buttonWidth, onPressed: () {}),
+                  ],
+                ),
               ),
             ),
           ),
@@ -224,9 +238,10 @@ class PixelButton extends StatefulWidget {
   final String label;
   final IconData icon;
   final Color color;
+  final double width;
   final VoidCallback onPressed;
 
-  const PixelButton({super.key, required this.label, required this.icon, required this.color, required this.onPressed});
+  const PixelButton({super.key, required this.label, required this.icon, required this.color, this.width = 280, required this.onPressed});
 
   @override
   State<PixelButton> createState() => _PixelButtonState();
@@ -237,31 +252,32 @@ class _PixelButtonState extends State<PixelButton> {
 
   @override
   Widget build(BuildContext context) {
+    final isSmall = widget.width < 250;
     return GestureDetector(
       onTapDown: (_) => setState(() => _isPressed = true),
       onTapUp: (_) { setState(() => _isPressed = false); widget.onPressed(); },
       onTapCancel: () => setState(() => _isPressed = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 50),
-        width: 280,
-        height: 60,
+        width: widget.width,
+        height: isSmall ? 48 : 60,
         margin: EdgeInsets.only(top: _isPressed ? 4 : 0),
         decoration: BoxDecoration(
           color: widget.color,
-          border: Border.all(color: Colors.black, width: 3),
-          boxShadow: _isPressed ? [] : [const BoxShadow(color: Colors.black, offset: Offset(4, 4), blurRadius: 0)],
+          border: Border.all(color: Colors.black, width: isSmall ? 2 : 3),
+          boxShadow: _isPressed ? [] : [BoxShadow(color: Colors.black, offset: Offset(isSmall ? 3 : 4, isSmall ? 3 : 4), blurRadius: 0)],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(widget.icon, color: Colors.black, size: 28),
-            const SizedBox(width: 10),
+            Icon(widget.icon, color: Colors.black, size: isSmall ? 22 : 28),
+            SizedBox(width: isSmall ? 6 : 10),
             Text(
               widget.label,
               style: TextStyle(
                 fontFamily: GoogleFonts.vt323().fontFamily,
                 color: Colors.black,
-                fontSize: 28,
+                fontSize: isSmall ? 20 : 28,
                 fontWeight: FontWeight.bold,
               ),
             ),

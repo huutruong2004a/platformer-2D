@@ -179,6 +179,15 @@ class SupabaseService {
              for (final cb in _playerAtFlagCallbacks) cb(data['id']);
            }
         })
+        .onBroadcast(event: 'skin', callback: (payload) {
+           final data = _extractPayload(payload);
+           print("SKIN UPDATE received: $data");
+           if (data != null && data['id'] != currentUserId) {
+             final userId = data['id'] as String;
+             final skinIndex = data['idx'] as int? ?? 0;
+             for (final cb in _skinUpdateCallbacks) cb(userId, skinIndex);
+           }
+        })
         // PRESENCE
         .onPresenceSync((payload) {
           print('Presence Sync: $payload');
@@ -370,6 +379,10 @@ class SupabaseService {
   }
 
   void leaveRoom() {
+    // Clear current level tracking for new room
+    _currentLevel = null;
+    _currentRoomId = null;
+    
     if (_roomChannel != null) {
       _roomChannel!.untrack();
       _client.removeChannel(_roomChannel!);

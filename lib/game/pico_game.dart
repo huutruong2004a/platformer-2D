@@ -439,18 +439,27 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
     final totalPlayers = players.isEmpty ? 1 : players.length;
     
     // Debug log to trace why it might fail
-    print("Checking Win Condition: At Flag: ${playersAtFlag.length} / Total: $totalPlayers");
+    print("Checking Win Condition: At Flag: ${playersAtFlag.length} / Total: $totalPlayers, Coins: ${scoreNotifier.value}/3");
     print("Players at flag: $playersAtFlag");
     print("All Players: $players");
 
+    // MULTIPLAYER WIN CONDITION:
+    // 1. Team must collect AT LEAST 3 coins (shared score)
+    // 2. ALL players must touch the flag (can be sequential, not simultaneous)
+    final requiredCoins = 3;
+    
+    if (scoreNotifier.value < requiredCoins) {
+      print('Need ${requiredCoins - scoreNotifier.value} more coins to complete level!');
+      return;
+    }
+    
     // All players must be at flag
     if (playersAtFlag.length >= totalPlayers) {
-      print('LEVEL COMPLETED! All $totalPlayers players at flag!');
+      print('LEVEL COMPLETED! All $totalPlayers players at flag with ${scoreNotifier.value} coins!');
       pauseEngine(); 
       overlays.add('LevelComplete'); 
     } else {
       final remaining = totalPlayers - playersAtFlag.length;
-      // Show toast or HUD message?
       print('Waiting for $remaining more players at flag...');
     }
   }

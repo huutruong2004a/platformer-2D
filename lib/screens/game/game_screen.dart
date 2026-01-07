@@ -6,6 +6,7 @@ import '../../game/pico_game.dart';
 import '../../game/pico_game_single.dart';
 import '../../providers/game_provider.dart';
 import '../../providers/room_provider.dart';
+import '../../data/supabase_service.dart';
 import 'game_hud.dart';
 import 'level_complete_menu.dart';
 import 'pause_menu.dart';
@@ -134,10 +135,25 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
   
   void _setupGameListeners() {
-    // Don't set up start_game listener here - LobbyScreen handles navigation
-    // This prevents callback accumulation and duplicate navigation
-    // LobbyScreen's callback has the captured roomId which is essential for multiplayer
-    print("GameScreen: start_game navigation handled by LobbyScreen");
+    // CRITICAL: Register start_game callback for CLIENTS to navigate to next level
+    // When Host clicks "Next Level", clients need this callback to navigate
+    final roomId = widget.roomIdFromUrl;
+    if (roomId != null && _game is PicoGame) {
+      print("GameScreen: Setting up start_game callback for multiplayer (roomId: $roomId)");
+      SupabaseService().setStartGameCallback((levelId) {
+        print("GameScreen: Received start_game for level: $levelId");
+        if (mounted) {
+          // Navigate to next level
+          if (levelId == 'lobby') {
+            context.go('/lobby');
+          } else {
+            context.go('/play/$levelId?roomId=$roomId');
+          }
+        }
+      });
+    } else {
+      print("GameScreen: Single player mode - no start_game callback needed");
+    }
   }
   
   void _removeListeners() {
@@ -151,7 +167,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   @override
   Widget build(BuildContext context) {
     final roomState = ref.watch(roomProvider);
-    final isHost = roomState.isHost;
+    // Single player (no room) = always treated as host for navigation buttons
+    final isSinglePlayer = roomState.roomId == null;
+    final isHost = isSinglePlayer || roomState.isHost;
     
     if (_game == null) {
       return const Scaffold(

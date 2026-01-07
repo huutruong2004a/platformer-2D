@@ -106,7 +106,7 @@ class LevelCompleteMenu extends ConsumerWidget { // Changed to ConsumerWidget
     );
   }
 
-  void _broadcastNextLevel(BuildContext context, WidgetRef ref, {bool sameLevel = false}) {
+  Future<void> _broadcastNextLevel(BuildContext context, WidgetRef ref, {bool sameLevel = false}) async {
     // Parse level hiện tại: "map1" -> 1
     final currentLevelNum = int.tryParse(game.levelId.replaceAll(RegExp(r'[^0-9]'), '')) ?? 1;
     final nextLevelNum = sameLevel ? currentLevelNum : currentLevelNum + 1;
@@ -119,11 +119,24 @@ class LevelCompleteMenu extends ConsumerWidget { // Changed to ConsumerWidget
     // 2. Logic điều hướng
     if (isMultiplayer && game is PicoGame && (game as PicoGame).supabaseService != null) {
        // --- MULTIPLAYER ---
+       String targetLevel;
        if (nextLevelNum > 8 && !sameLevel) {
-          (game as PicoGame).supabaseService?.broadcastStartGame('lobby');
+          targetLevel = 'lobby';
+          await (game as PicoGame).supabaseService?.broadcastStartGame('lobby');
        } else {
+          targetLevel = nextLevelId;
           print("Host Broadcasting Start Game: $nextLevelId");
-          (game as PicoGame).supabaseService?.broadcastStartGame(nextLevelId);
+          await (game as PicoGame).supabaseService?.broadcastStartGame(nextLevelId);
+       }
+       
+       // Navigate IMMEDIATELY after broadcast (no Future.delayed)
+       print("Host navigating to: $targetLevel with roomId: $roomId");
+       if (!context.mounted) return;
+       
+       if (targetLevel == 'lobby') {
+         context.go('/lobby');
+       } else {
+         context.go('/play/$targetLevel?roomId=$roomId');
        }
     } else {
        // --- SINGLE PLAYER (OFFLINE) ---
@@ -131,7 +144,7 @@ class LevelCompleteMenu extends ConsumerWidget { // Changed to ConsumerWidget
        if (nextLevelNum > 8 && !sameLevel) {
           context.go('/levels'); // Go back to level selection
        } else {
-          context.pushReplacement('/play/$nextLevelId');
+          context.go('/play/$nextLevelId');
        }
     }
   }

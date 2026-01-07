@@ -35,26 +35,34 @@ class PixelUI {
     );
   }
 
-  // Button (Nút bấm)
+  // Button (Nút bấm) - Responsive cho mobile
   static Widget button({
     required String text,
     required VoidCallback onPressed,
     Color color = const Color(0xFF88C070), // Màu xanh Gameboy
     Color textColor = Colors.black,
     double width = 200,
+    bool? isSmall, // Explicit small mode for mobile
   }) {
+    // Responsive sizing - use explicit isSmall or detect from width
+    final small = isSmall ?? (width < 250 && width != double.infinity);
+    final fontSize = small ? 18.0 : 28.0;
+    final verticalPadding = small ? 8.0 : 12.0;
+    final borderWidth = small ? 2.0 : 4.0;
+    final shadowOffset = small ? 3.0 : 4.0;
+    
     return GestureDetector(
       onTap: onPressed,
       child: Container(
         width: width,
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        padding: EdgeInsets.symmetric(vertical: verticalPadding, horizontal: 12),
         decoration: BoxDecoration(
           color: color,
-          border: Border.all(color: Colors.black, width: 4),
-          boxShadow: const [
+          border: Border.all(color: Colors.black, width: borderWidth),
+          boxShadow: [
              BoxShadow(
-              color: Colors.black, // Bóng cứng
-              offset: Offset(4, 4),
+              color: Colors.black,
+              offset: Offset(shadowOffset, shadowOffset),
               blurRadius: 0,
             ),
           ],
@@ -62,7 +70,7 @@ class PixelUI {
         child: Center(
           child: Text(
             text,
-            style: font(size: 28, color: textColor),
+            style: font(size: fontSize, color: textColor),
           ),
         ),
       ),

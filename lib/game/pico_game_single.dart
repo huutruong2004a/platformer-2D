@@ -155,11 +155,17 @@ class PicoGameSingle extends Forge2DGame with HasKeyboardHandlerComponents, Pico
 
   // === FLAG/WIN SYSTEM ===
   void onPlayerAtFlag({bool broadcast = true}) {
+    // SINGLE PLAYER: Must collect 3 coins + touch flag to win
     if (!isPlayerAtFlag) {
-      isPlayerAtFlag = true;
-      print('Single Player Level Complete!');
-      pauseEngine();
-      overlays.add('LevelComplete');
+      // Check if player has collected required coins (3)
+      if (scoreNotifier.value >= 3) {
+        isPlayerAtFlag = true;
+        print('Single Player Level Complete! Coins: ${scoreNotifier.value}');
+        pauseEngine();
+        overlays.add('LevelComplete');
+      } else {
+        print('Need ${3 - scoreNotifier.value} more coins to complete level!');
+      }
     }
   }
   
