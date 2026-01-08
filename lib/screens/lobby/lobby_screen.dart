@@ -30,22 +30,18 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
   String? _lastRoomId;
 
   PicoGame _getOrCreateGame(dynamic roomState, dynamic roomNotifier) {
-    final roomId = roomState.roomId as String?;
-    
-    // Create new game only if:
-    // 1. No game exists yet, OR
-    // 2. Room changed (joined/left room)
-    if (_lobbyGame == null || _lastRoomId != roomId) {
-      _lastRoomId = roomId;
+    // Initialize Game ONCE (Offline Mode initially)
+    if (_lobbyGame == null) {
+      print("Initializing Lobby Game (Offline Mode)...");
       _lobbyGame = PicoGame(
         levelId: 'lobby',
-        players: roomState.players,
-        currentUserId: roomState.currentUserId,
-        supabaseService: roomId != null ? roomNotifier.supabaseService : null,
+        players: [], // Start empty
+        currentUserId: null,
       );
     }
     return _lobbyGame!;
   }
+  
   void _setupStartGameCallback() {
     if (_callbackSetup) return;
     _callbackSetup = true;
@@ -94,6 +90,41 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
     final roomNotifier = ref.read(roomProvider.notifier);
     isInRoom = roomState.roomId != null;
     
+    // Listen for Room State changes to update Game Sync
+    ref.listen(roomProvider, (previous, next) {
+      final prevRoomId = previous?.roomId;
+      final nextRoomId = next.roomId;
+      
+      // Update Game when Room ID changes (Create/Join) or Players change
+      if (_lobbyGame != null) {
+        // Detect entering a room
+        if (prevRoomId != nextRoomId && nextRoomId != null) {
+           print("LobbyScreen: Room Changed ($prevRoomId -> $nextRoomId). Updating Game State...");
+           if (next.currentUserId != null) {
+             _lobbyGame!.updateLobbyState(
+                service: roomNotifier.supabaseService,
+                players: next.players,
+                currentUserId: next.currentUserId!,
+                skins: next.playerSkins,
+             );
+           }
+        }
+        
+        // Detect player list update (e.g. someone joined) while in room
+        if (nextRoomId != null && previous != null && next.players.length != previous.players.length) {
+           print("LobbyScreen: Player List Changed. Updating Game State...");
+             if (next.currentUserId != null) {
+             _lobbyGame!.updateLobbyState(
+                service: roomNotifier.supabaseService,
+                players: next.players,
+                currentUserId: next.currentUserId!,
+                skins: next.playerSkins,
+             );
+           }
+        }
+      }
+    });
+
     // Reset flags when room changes (left old room or joined new room)
     if (_lastRoomId != roomState.roomId) {
       _callbackSetup = false;

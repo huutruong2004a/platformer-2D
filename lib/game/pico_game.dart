@@ -17,10 +17,12 @@ import 'components/player/player.dart';
 
 class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoControls {
   final String levelId;
-  final SupabaseService? supabaseService;
+  SupabaseService? supabaseService; // Changed from final
   // Mutable player list to track current room members
   List<String> players = [];
-  final String? currentUserId;
+  // Map UserId -> SkinIndex for visual sync
+  Map<String, int> playerSkins; // Changed from final
+  String? currentUserId; // Changed from final
   
   // Locking flag to prevent race conditions during level load/reset
   bool _isLevelLoading = false;
@@ -47,7 +49,9 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
     this.supabaseService,
     List<String>? players,
     this.currentUserId,
-  }) : super(
+    Map<String, int>? playerSkins,
+  }) : playerSkins = playerSkins ?? {},
+       super(
         gravity: GameConfig.gravity,
         camera: CameraComponent.withFixedResolution(width: 640, height: 360),
       ) {
@@ -55,6 +59,37 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
       this.players.addAll(players);
       this.players.sort(); // Ensure consistent order initially
     }
+  }
+  
+  // Method to update game state when joining a room in Lobby
+  void updateLobbyState({
+    required SupabaseService service,
+    required List<String> players,
+    required String currentUserId,
+    required Map<String, int> skins,
+  }) {
+    print("PicoGame: Updating Lobby State. Players: ${players.length}");
+    this.supabaseService = service;
+    this.currentUserId = currentUserId;
+    this.playerSkins = skins;
+    
+    // Update player list
+    this.players.clear();
+    this.players.addAll(players);
+    this.players.sort();
+    
+    // Setup callbacks with new service
+    _setupMultiplayerCallbacks();
+    
+    // Trigger Spawn
+    // Clear existing players first
+    for (final p in _playerRegistry.values) {
+      p.removeFromParent();
+    }
+    _playerRegistry.clear();
+    _spawnedPlayerIds.clear();
+    
+    _spawnPlayers();
   }
 
   @override
@@ -67,7 +102,12 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
     this.world = world;
 
     camera.viewfinder.anchor = Anchor.center;
-    camera.viewfinder.zoom = 2.0; // Zoom level synchronized
+    // Zoom Logic: Lobby needs wider view (1.5), Game Levels need zoom (2.0)
+    if (levelId.contains('lobby')) {
+      camera.viewfinder.zoom = 1.5;
+    } else {
+      camera.viewfinder.zoom = 2.0; 
+    }
     
     // Setup Multiplayer Callbacks
     _setupMultiplayerCallbacks();
@@ -130,6 +170,33 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
     supabaseService!.setPresenceSyncCallback((newPlayerIds) {
       _handlePresenceUpdate(newPlayerIds);
     });
+    
+    // Listen for Skin Updates
+    supabaseService!.setSkinUpdateCallback((userId, skinIndex) {
+      onSkinUpdate(userId, skinIndex);
+    });
+  }
+  
+  // Handle visual update when someone changes skin in lobby
+  void onSkinUpdate(String userId, int skinIndex) {
+    print("Game received Skin Update: $userId -> $skinIndex");
+    playerSkins[userId] = skinIndex;
+    
+    // If player exists, update their appearance immediately (if supported by Player component)
+    // For now, we might need to recreate the player or add a method to update sprite
+    final player = _playerRegistry[userId];
+    if (player != null) {
+      // TODO: Implement dynamic skin update in Player component
+      // For now, removing and re-adding is a brute-force way, or just update next spawn
+      // Ideally Player has updateSkin() method.
+      // Since Player loads sprite in onLoad, we can't just change a property easily without reload logic.
+      // But we can swap the SpriteComponent.
+      
+      // Better approach: Restart level if in lobby to refresh? No, that resets position.
+      // Let's just update the map for now. The next spawn will be correct.
+      // If we want real-time update in lobby without respawn:
+      // We need to implement swapSkin() in Player.
+    }
   }
   
   // Track spawned players to avoid duplicates
@@ -175,10 +242,13 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
        // Calculate position based on index (sorted)
        final spawnPos = currentLevelSpawnPoint! + Vector2(i * 20.0, 0); 
        
+       // Determine Skin: Use Map if available, else fallback to Index
+       final skinIdx = playerSkins[playerId] ?? i;
+       
        final player = Player(
          initialPosition: spawnPos,
          isControllable: isMe,
-         skinIndex: i, // Index determines skin
+         skinIndex: skinIdx, // Correct Skin Index
          playerId: playerId, // Store player ID for sync
        );
        
@@ -186,7 +256,7 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
        _playerRegistry[playerId] = player;
        
        world.add(player);
-       print('Spawned Player: $playerId (Me: $isMe) at Index $i, Pos: $spawnPos');
+       print('Spawned Player: $playerId (Me: $isMe) at Index $i (Skin $skinIdx), Pos: $spawnPos');
      }
   }
 
@@ -201,6 +271,12 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
   }
 
   void _updateCamera(double dt) {
+    // LOBBY CAMERA: Static, centered
+    if (levelId.contains('lobby')) {
+      camera.viewfinder.position = Vector2(mapSize.x / 2, mapSize.y / 2);
+      return;
+    }
+
     final viewportSize = camera.viewport.virtualSize;
     final currentZoom = camera.viewfinder.zoom;
     
@@ -380,7 +456,14 @@ class PicoGame extends Forge2DGame with HasKeyboardHandlerComponents, PicoContro
     final newWorld = PicoWorld(currentLevelId: levelId);
     world = newWorld;
     add(newWorld);
-    camera.viewfinder.zoom = 2.0; // Must match onLoad zoom value
+    
+    // Reset Zoom
+    if (levelId.contains('lobby')) {
+      camera.viewfinder.zoom = 1.5;
+    } else {
+      camera.viewfinder.zoom = 2.0;
+    }
+    
     camera.viewfinder.anchor = Anchor.center;
     
     // Reset mobile control states

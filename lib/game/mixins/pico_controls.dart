@@ -21,8 +21,8 @@ mixin PicoControls on Forge2DGame {
           srcPosition: Vector2(162, 162),
           srcSize: Vector2(18, 18),
         ),
-        size: Vector2(70, 70), // Tăng kích thước nút lên 70 cho dễ bấm
-        paint: Paint()..color = Colors.white.withOpacity(0.5), // Giảm độ mờ để đỡ che map
+        size: Vector2(50, 50), // Giảm kích thước nút xuống 50
+        paint: Paint()..color = Colors.white.withOpacity(0.5),
       );
 
       final spritePressed = SpriteComponent(
@@ -31,7 +31,7 @@ mixin PicoControls on Forge2DGame {
           srcPosition: Vector2(162, 162),
           srcSize: Vector2(18, 18),
         ),
-        size: Vector2(70, 70),
+        size: Vector2(50, 50),
         paint: Paint()..color = const Color(0xFF88C070).withOpacity(0.8),
       );
 
@@ -44,12 +44,12 @@ mixin PicoControls on Forge2DGame {
         children: [
            TextComponent(
               text: label,
-              position: Vector2(35, 35), // Căn giữa nút 70x70
+              position: Vector2(25, 25), // Căn giữa nút 50x50
               anchor: Anchor.center,
               textRenderer: TextPaint(
                 style: const TextStyle(
                   color: Colors.black, 
-                  fontSize: 35, 
+                  fontSize: 24, 
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Courier',
                 )
@@ -63,7 +63,7 @@ mixin PicoControls on Forge2DGame {
 
     // Nút Trái
     final leftButton = createSpriteButton(
-      position: Vector2(30, viewportSize.y - 100),
+      position: Vector2(20, viewportSize.y - 80),
       label: '<',
       onPressed: () => isLeftPressed = true,
       onReleased: () => isLeftPressed = false,
@@ -72,7 +72,7 @@ mixin PicoControls on Forge2DGame {
 
     // Nút Phải
     final rightButton = createSpriteButton(
-      position: Vector2(120, viewportSize.y - 100),
+      position: Vector2(90, viewportSize.y - 80),
       label: '>',
       onPressed: () => isRightPressed = true,
       onReleased: () => isRightPressed = false,
@@ -81,7 +81,7 @@ mixin PicoControls on Forge2DGame {
 
     // Nút Nhảy
     final jumpButton = createSpriteButton(
-      position: Vector2(viewportSize.x - 100, viewportSize.y - 100),
+      position: Vector2(viewportSize.x - 80, viewportSize.y - 80),
       label: '^',
       onPressed: () => isJumpPressed = true,
       onReleased: () => isJumpPressed = false,

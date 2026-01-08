@@ -46,8 +46,21 @@ class PauseMenu extends StatelessWidget {
               icon: Icons.refresh,
               onPressed: () {
                 game.overlays.remove('PauseMenu');
-                game.resumeEngine(); // Cần resume trước khi dispose để tránh lỗi
-                context.pushReplacement('/play/${game.levelId}');
+                game.resumeEngine();
+                
+                // Call resetLevel directly on the game instance
+                // This ensures multiplayer broadcast works and session is preserved
+                if (game is PicoGame) {
+                  (game as PicoGame).resetLevel(broadcast: true);
+                } else if (game is dynamic) {
+                  // Fallback for single player or loose typing
+                  try {
+                    game.resetLevel(broadcast: true);
+                  } catch (e) {
+                     // Last resort fallback
+                     context.pushReplacement('/play/${game.levelId}');
+                  }
+                }
               },
             ),
             const SizedBox(height: 16),

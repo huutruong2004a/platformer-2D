@@ -14,7 +14,7 @@ class MoveSnapshot {
   MoveSnapshot(this.position, this.velocity, this.timestamp);
 }
 
-class Player extends BodyComponent<Forge2DGame> with KeyboardHandler, HasGameRef<Forge2DGame> {
+class Player extends BodyComponent<Forge2DGame> with KeyboardHandler, ContactCallbacks, HasGameRef<Forge2DGame> {
   final Vector2 initialPosition;
   final bool isControllable; // Cờ kiểm soát input
   final int skinIndex; // 0: Green, 1: Blue, 2: Pink, 3: Yellow
@@ -27,6 +27,9 @@ class Player extends BodyComponent<Forge2DGame> with KeyboardHandler, HasGameRef
   bool _needsRespawn = false;
   bool _wasMobileJumpPressed = false; // Theo dõi trạng thái nút nhảy mobile frame trước
 
+  // --- PHYSICS CONTACTS ---
+  final Set<Player> touchingPlayers = {};
+
   // --- MULTIPLAYER INTERPOLATION ---
   final List<MoveSnapshot> _positionBuffer = [];
   // Render delay: 100ms (Buffers packets to ensure smoothness)
@@ -38,6 +41,20 @@ class Player extends BodyComponent<Forge2DGame> with KeyboardHandler, HasGameRef
     this.skinIndex = 0,
     this.playerId = 'local_player', // Default for single player
   });
+
+  @override
+  void beginContact(Object other, Contact contact) {
+    if (other is Player) {
+      touchingPlayers.add(other);
+    }
+  }
+
+  @override
+  void endContact(Object other, Contact contact) {
+    if (other is Player) {
+      touchingPlayers.remove(other);
+    }
+  }
 
   @override
   Future<void> onLoad() async {
@@ -136,7 +153,42 @@ class Player extends BodyComponent<Forge2DGame> with KeyboardHandler, HasGameRef
       if (!isGrounded) {
         currentSpeed *= GameConfig.longJumpMultiplier;
       }
+      
+      // Calculate desired velocity
       velocity.x = inputX * currentSpeed;
+
+      // --- PUSHING MECHANIC LOGIC ---
+      if (touchingPlayers.isNotEmpty && inputX != 0) {
+        double speedMultiplier = 1.0;
+        
+        for (final other in touchingPlayers) {
+          // Check if we are actually pushing towards them
+          // Case 1: Moving Right, Other is to my Right
+          final isPushingRight = inputX > 0 && other.body.position.x > body.position.x;
+          // Case 2: Moving Left, Other is to my Left
+          final isPushingLeft = inputX < 0 && other.body.position.x < body.position.x;
+
+          if (isPushingRight || isPushingLeft) {
+             final otherVx = other.body.linearVelocity.x;
+             
+             // Check Head-on Collision
+             // If other is moving opposite AND has significant speed (> 1.0)
+             if (otherVx.abs() > 1.0 && otherVx.sign != velocity.x.sign) {
+               speedMultiplier = 0.0; // Stop immediately
+               break; // Hard stop takes priority
+             }
+             
+             // Check Pushing Stationary or Slow/Same Direction
+             // If other is stopped OR moving same direction
+             if (otherVx.abs() < 1.0 || otherVx.sign == velocity.x.sign) {
+               // Apply 50% penalty. 
+               // Note: If multiple players in chain, we keep it at 50% max penalty (not 0.5 * 0.5)
+               if (speedMultiplier > 0.5) speedMultiplier = 0.5;
+             }
+          }
+        }
+        velocity.x *= speedMultiplier;
+      }
 
       // Flip Sprite
       if (inputX != 0) {
